@@ -30,6 +30,14 @@ NORGate.propTypes = {
 };
 
 function Wire(props) {
+    if (!props.fromX && !props.fromY) {
+        return <g><line x1={props.midX} y1={props.toY} x2={props.toX} y2={props.toY} stroke={props.color} strokeWidth={props.strokeWidth} /></g>;
+    }
+
+    if (!props.toX && !props.toY) {
+        return <g><line x1={props.fromX} y1={props.fromY} x2={props.midX} y2={props.fromY} stroke={props.color} strokeWidth={props.strokeWidth}/></g>;
+    }
+
     return <g>
         <line x1={props.fromX} x2={props.midX} y1={props.fromY} y2={props.fromY} stroke={props.color} strokeWidth={props.strokeWidth}></line>
         <line x1={props.midX} x2={props.toX} y1={props.toY} y2={props.toY} stroke={props.color} strokeWidth={props.strokeWidth}></line>
@@ -52,6 +60,7 @@ function Circuit(props) {
 
     let cx = 30;
     let cy = 30;
+    let midXOffset = 7;
     let children = React.Children.map(props.children, child => {
         if (child.type === NORGate) {
             return React.cloneElement(child, {
@@ -67,13 +76,21 @@ function Circuit(props) {
             let toY = props.yspacing * child.props.toY + cy + yoffset;
             let fromX = props.xspacing * child.props.fromX + cx;
             let fromY = props.yspacing * child.props.fromY + cy;
+            let midX = fromX + (toX - fromX)/2.0;
+            if (!toX && !toY) {
+                midX = props.xspacing/2.0 + fromX
+            }
+            if (!fromX && !fromY) {
+                midX = -props.xspacing/2.0 + toX
+            }
+
             return React.cloneElement(child,
                 {
                     toX: toX,
                     toY: toY,
                     fromX: fromX,
                     fromY: fromY,
-                    midX: fromX + (toX - fromX) / 2.0,
+                    midX: midX + midXOffset,
                     dotRadius: props.wireDotRadius,
                     color: child.props.color,
                     strokeWidth: props.wireWidth,
@@ -90,6 +107,10 @@ Circuit.propTypes = {
     wireDotRadius: PropTypes.number.isRequired,
     wireWidth: PropTypes.number.isRequired,
 };
+
+function LogicGate(props) {
+
+}
 
 class App extends Component {
     render() {
@@ -121,16 +142,21 @@ class App extends Component {
                         <rect x={0} y={0} width={width} height={width} stroke={'black'} strokeWidth={3.0} fill={"none"}/>
                         {/*<line x1={25} y1={30} x2={100} y2={30} stroke={'black'} strokeWidth={4} />*/}
                         <g transform={"translate(100,100)"}>
-                                <Circuit xspacing={100} yspacing={100} wireDotRadius={3} wireWidth={3}>
+                            <Circuit xspacing={100} yspacing={80} wireDotRadius={2} wireWidth={3}>
                                 <Wire fromX={0} fromY={0} toX={1} toY={0.5} whichInput={0} color={'purple'}/>
                                 <Wire fromX={0} fromY={1} toX={1} toY={0.5} whichInput={1} color={'blue'}/>
                                 <Wire fromX={1} fromY={0.5} toX={2} toY={0} whichInput={1} color={'red'}/>
                                 <Wire fromX={1} fromY={0.5} toX={2} toY={1} whichInput={0} color={'red'}/>
+                                <Wire fromX={2} fromY={1} toX={3} toY={0.5} whichInput={1} color={'green'}/>
+                                <Wire toX={3} toY={0.5} whichInput={0} color={'green'}/>
+                                <Wire fromX={2} fromY={0} color={'black'}/>
+                                <Wire fromX={3} fromY={0.5} color={'gray'}/>
                                 <NORGate x={0} y={0} />
                                 <NORGate x={0} y={1} />
                                 <NORGate x={1} y={0.5} />
                                 <NORGate x={2} y={0} />
                                 <NORGate x={2} y={1} />
+                                <NORGate x={3} y={0.5} />
                             </Circuit>
                         </g>
                     </svg>

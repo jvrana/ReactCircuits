@@ -3,8 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "babel-preset-react": "^6.24.1",
+    "nyc": "^11.7.1",
     "prop-types": "^15.6.1",
-    "react": "^16.2.0",
+    "react": "^16.3.2",
     "react-bootstrap": "^0.32.1",
     "react-dom": "^16.2.0",
     "react-scripts": "1.1.1"
@@ -12,7 +14,16 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "test": "react-scripts test --env=jsdom",
-    "eject": "react-scripts eject"
+    "test": "nyc mocha --require babel-register",
+    "eject": "react-scripts eject",
+    "coverage": "nyc mocha --require babel-register"
+  },
+  "devDependencies": {
+    "babel": "^6.23.0",
+    "babel-cli": "^6.26.0",
+    "babel-core": "^6.26.0",
+    "babel-preset-env": "^1.6.1",
+    "babel-register": "^6.26.0",
+    "chai": "^4.1.2"
   }
 }

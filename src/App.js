@@ -1,8 +1,16 @@
 import React, {Component} from 'react';
 import './App.css';
-import {graph_coordinates} from './graph_drawing.js'
+import {calcGraphCoordinates} from './utilities/graph_drawing.js'
+import {gatesToAdjList} from "./utilities/gates_to_adjacency_list.js";
 import {Jumbotron} from 'react-bootstrap';
 import PropTypes from 'prop-types';
+import {invertAdjList, topoSortHelper, untangleGraph} from "./utilities/graph_drawing";
+import {hasIntersection} from "./utilities/hasIntersection";
+
+let randomColor = require('randomcolor');
+let mean = require('lodash/mean');
+let filter = require('lodash/filter');
+let range = require('lodash/range');
 
 function NORGate(props) {
     return <g transform={"translate(" + props.x + "," + props.y + ")"}>
@@ -35,14 +43,14 @@ NORGate.propTypes = {
 function Wire(props) {
     if (!props.fromX && !props.fromY) {
         return <g>
-            <line x1={props.midX} y1={props.toY} x2={props.toX} y2={props.toY} stroke={props.color}
+            <line x1={props.midX - (props.midX - props.toX) * 0.1} y1={props.toY} x2={props.toX} y2={props.toY} stroke={props.color}
                   strokeWidth={props.strokeWidth}/>
         </g>;
     }
 
     if (!props.toX && !props.toY) {
         return <g>
-            <line x1={props.fromX} y1={props.fromY} x2={props.midX} y2={props.fromY} stroke={props.color}
+            <line x1={props.fromX} y1={props.fromY} x2={props.midX + (props.fromX - props.midX) * 0.1} y2={props.fromY} stroke={props.color}
                   strokeWidth={props.strokeWidth}/>
         </g>;
     }
@@ -62,6 +70,7 @@ function Wire(props) {
 Wire.propTypes = {
     toX: PropTypes.number.isRequired,
     toY: PropTypes.number.isRequired,
+    midX: PropTypes.number,
     fromX: PropTypes.number.isRequired,
     fromY: PropTypes.number.isRequired,
     whichInput: PropTypes.number.isRequired,
@@ -89,13 +98,19 @@ function Circuit(props) {
             let toY = props.yspacing * child.props.toY + cy + yoffset;
             let fromX = props.xspacing * child.props.fromX + cx;
             let fromY = props.yspacing * child.props.fromY + cy;
-            let midX = fromX + (toX - fromX) / 2.0;
+            // let midX = child.props.midX;
+            let midX = toX - props.xspacing/2.0;
+            // let midX = fromX + (toX - fromX) / 2.0;
             if (!toX && !toY) {
                 midX = props.xspacing / 2.0 + fromX
             }
             if (!fromX && !fromY) {
                 midX = -props.xspacing / 2.0 + toX
             }
+
+            // if ( typeof fromX !== 'undefined') {
+            //     midX += 3;
+            // }
 
             return React.cloneElement(child,
                 {
@@ -163,39 +178,168 @@ class App extends Component {
                             }
                         /* ]]> */`;
 
-        let graph = {
-            5: [1,2],
-            1: [0],
-            2: [null, 0],
-            4: [],
-            6: [5]
-        };
+        // let nor_gates = [
+        //
+        //     [10, 10, 6],
+        //     [0, 1, 2],
+        //     [3, 2, 5],
+        //     [2, 4, 6],
+        //     [5, 6, 7],
+        // ];
+        // let nor_gates = [
+        //     [0, 0, 1],
+        //     [0, 0, 3],
+        //     [1, 0, 2],
+        //     [2, 0, 5],
+        //     [0, 0, 2],
+        //     [3, 0, 2]
+        // ];
+        let nor_gates = [
+            [0, 0, 4],
+            [1, 0, 3],
+            [3, 4, 5],
+            [0, 0, 1],
+            [0, 0, 1],
+            [2, 0, 4],
+            [0, 0, 2],
+        ];
 
-        let coor = graph_coordinates(graph);
+
+        let _adj = gatesToAdjList(nor_gates);
+        let graph = _adj.adjacency_list;
+
+        let wire_list = _adj.wires;
+        let wire_hash = _adj.wire_hash;
+        let wire_colors = {};
+        wire_list.forEach( (wire) => {
+            wire_colors[wire] = randomColor();
+        });
+        let _c = calcGraphCoordinates(graph, 4);
+        let coor = _c.coordinate_hash;
+        let layers = _c.layers;
+
+
+
+        // add phony nodes to graph
+
+        let graph_copy = Object.assign({}, graph);
+
+        // TODO: correct adding extra nodes
+        let temporary_nodes = {};
+        let _topo = topoSortHelper(graph);
+        let temp_node_i = _topo.sorted.length;
+        _topo.sorted.forEach( (parent) => {
+            let c0 = coor[parent][0];
+            let children = graph[parent];
+            children.forEach( child => {
+                let c1 = coor[child][0];
+                console.log(parent);
+                console.log(range(c0+1, c1));
+                range(c0+1, c1).forEach( column => {
+                    console.log("temp node " + temp_node_i);
+                    temporary_nodes[temp_node_i-1] = [temp_node_i];
+                    coor[temp_node_i] = [column, 0];
+                    temp_node_i += 1
+                })
+            })
+        });
+        console.log(graph_copy);
+        Object.assign(graph, temporary_nodes);
+        console.log(graph);
+        _topo = topoSortHelper(graph);
+
+        // move to mid point of neighbors
+        let graph_T = invertAdjList(graph);
+        let placed = [];
+        _topo.sorted.forEach( (child, i) => {
+            let parents = graph_T[child.toString()];
+
+            let column = coor[child][0];
+            console.log("Column: " + column);
+            let placed_in_col = placed[column];
+            if (typeof placed_in_col == 'undefined') {
+                placed[column] = [];
+                placed_in_col = placed[column];
+            }
+            console.log(child);
+            console.log(graph_T);
+            console.log(parents);
+
+            // let sister_gates = filter(coor, (o, k) => { return coor[child][0] == o[0] && child !== k});
+            if (parents.length === 0 || typeof parents == 'undefined') {
+
+            } else {
+                let xs = parents.map( p => { return coor[p.toString()][1] });
+                let x = Math.floor(mean(xs));
+                // x = mean(xs);
+                console.log(placed_in_col);
+                if (placed_in_col.includes(x)) {
+                    x = Math.max(placed_in_col) + 1;
+                }
+                coor[child][1] = x;
+                placed_in_col.push(x);
+                console.log('pushing ' + x);
+                console.log(placed);
+            }
+        });
+
+        untangleGraph(layers, graph, coor);
+
+        // restore original graph
+        graph = graph_copy;
+
         let wires = [];
         let gates = [];
-        Object.keys(graph).forEach( (gate) => {
-            let _xy, x, y;
-            _xy = coor[gate];
+        Object.keys(graph).forEach( (gate_num) => {
+            let _xy, x, y, gate;
+
+            gate = nor_gates[gate_num];
+            _xy = coor[gate_num];
             x = _xy[0];
             y = _xy[1];
             gates.push(
                 <NORGate x={x} y={y} />
             );
-            graph[gate].map( (c, i) => {
+
+            let output_wire_num = gate[gate.length-1];
+            let output_wire_color = wire_colors[output_wire_num];
+
+            graph[gate_num].map( (c) => {
                 if (c !== null) {
                     let _toxy, toX, toY;
+                    let child_gate = nor_gates[c];
                     _toxy = coor[c];
                     toX = _toxy[0];
                     toY = _toxy[1];
+                    let whichInput = child_gate.slice(0,-1).indexOf(output_wire_num);
+                    while (whichInput !== -1) {
+                        wires.push(
+                            <Wire fromX={x} fromY={y} toX={toX} toY={toY} whichInput={whichInput} color={output_wire_color}/>
+                        );
+                        whichInput = child_gate.slice(0,-1).indexOf(output_wire_num, whichInput+1);
+                    }
+                }
+            });
 
+            // if nor gate has no dependents...
+            let _arr = graph[gate_num].filter(function(n){ return n != null });
+            if (_arr.length === 0) {
+                wires.push(
+                    <Wire fromX={x} fromY={y} color={wire_colors[nor_gates[gate_num][2]]}/>
+                )
+            }
+
+            // if nor gate has no parents...
+            let i1 = nor_gates[gate_num][0];
+            let i2 = nor_gates[gate_num][1];
+            [i1, i2].forEach( (i, whichInput) => {
+                if (wire_hash[i].from.length === 0) {
                     wires.push(
-                        <Wire fromX={x} fromY={y} toX={toX} toY={toY} whichInput={i} color={'black'}/>
-                    );
+                        <Wire toX={x} toY={y} whichInput={whichInput} color={wire_colors[i]} />
+                )
                 }
             });
         });
-        console.log(gates);
 
         return (
             <div className="App">
@@ -220,8 +364,8 @@ class App extends Component {
                         <rect x={0} y={0} width={width} height={width} stroke={'black'} strokeWidth={3.0}
                               fill={"none"}/>
                         {/*<line x1={25} y1={30} x2={100} y2={30} stroke={'black'} strokeWidth={4} />*/}
-                        <g transform={"translate(100,100)"}>
-                            <Circuit xspacing={100} yspacing={80} wireDotRadius={2} wireWidth={3}>
+                        <g transform={"translate(25,25)"}>
+                            <Circuit xspacing={100} yspacing={80} wireDotRadius={2} wireWidth={5}>
                                 {wires}
                                 {gates}
                             </Circuit>
